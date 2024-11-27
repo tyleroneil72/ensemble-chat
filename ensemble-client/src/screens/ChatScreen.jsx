@@ -1,4 +1,4 @@
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -9,7 +9,12 @@ import {
   Image,
   Alert,
 } from "react-native";
+import { io } from "socket.io-client";
 import { UserContext } from "../utils/UserContext";
+import generateUUID from "../utils/generateUUID";
+
+// Establish socket connection (GBC IP address)
+const socket = io("http://10.16.49.26:3000");
 
 export default function ChatScreen({ navigation }) {
   const { user } = useContext(UserContext);
@@ -17,28 +22,37 @@ export default function ChatScreen({ navigation }) {
   const [messages, setMessages] = useState([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  useEffect(() => {
+    // Listen for incoming messages
+    socket.on("receive_message", (data) => {
+      setMessages((prevMessages) => [...prevMessages, data]);
+    });
+
+    return () => {
+      socket.off("receive_message");
+    };
+  }, []);
+
   const sendMessage = () => {
     if (!message.trim()) {
       Alert.alert("Error", "Message cannot be empty.");
       return;
     }
 
-    // Add user message
-    const newMessages = [
-      ...messages,
-      { id: Date.now().toString(), username: user.username, text: message },
-    ];
-
-    // Add mock bot response
-    const botResponse = {
-      id: (Date.now() + 1).toString(),
-      username: "Ensemble Bot",
-      text: "Hello World",
-      profilePhoto: require("../../assets/placeholder.jpg"),
+    // Add the sender's message to the local state
+    const newMessage = {
+      id: generateUUID(),
+      username: user.username,
+      profilePhoto: user.profilePhoto,
+      message,
     };
 
-    setMessages([...newMessages, botResponse]);
-    setMessage("");
+    setMessages((prevMessages) => [...prevMessages, newMessage]);
+
+    // Send the message to the server
+    socket.emit("send_message", newMessage);
+
+    setMessage(""); // Clear the input field
   };
 
   const renderMessage = ({ item }) => {
@@ -50,27 +64,27 @@ export default function ChatScreen({ navigation }) {
           styles.messageContainer,
           isUserMessage
             ? styles.userMessageContainer
-            : styles.botMessageContainer,
+            : styles.receivedMessageContainer,
         ]}
       >
         <Image
           source={
-            isUserMessage
-              ? user.profilePhoto
-                ? { uri: user.profilePhoto }
-                : require("../../assets/placeholder.jpg")
-              : item.profilePhoto
+            item.profilePhoto
+              ? { uri: item.profilePhoto }
+              : require("../../assets/placeholder.jpg")
           }
           style={styles.profilePhoto}
         />
         <View
           style={[
             styles.messageBubble,
-            isUserMessage ? styles.userMessageBubble : styles.botMessageBubble,
+            isUserMessage
+              ? styles.userMessageBubble
+              : styles.receivedMessageBubble,
           ]}
         >
           <Text style={styles.username}>{item.username}</Text>
-          <Text style={styles.messageText}>{item.text}</Text>
+          <Text style={styles.messageText}>{item.message}</Text>
         </View>
       </View>
     );
@@ -118,7 +132,10 @@ export default function ChatScreen({ navigation }) {
       <FlatList
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => {
+          const key = item.id || `fallback-${index}`;
+          return key;
+        }}
         contentContainerStyle={styles.messagesContainer}
       />
 
@@ -195,7 +212,7 @@ const styles = StyleSheet.create({
   userMessageContainer: {
     flexDirection: "row-reverse",
   },
-  botMessageContainer: {
+  receivedMessageContainer: {
     flexDirection: "row",
   },
   profilePhoto: {
@@ -214,9 +231,11 @@ const styles = StyleSheet.create({
   },
   userMessageBubble: {
     alignSelf: "flex-end",
+    backgroundColor: "#e6f7ff",
   },
-  botMessageBubble: {
+  receivedMessageBubble: {
     alignSelf: "flex-start",
+    backgroundColor: "#f0f0f0",
   },
   username: {
     fontSize: 14,
