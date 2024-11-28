@@ -12,8 +12,10 @@ import {
 import { io } from "socket.io-client";
 import { UserContext } from "../utils/UserContext";
 import generateUUID from "../utils/generateUUID";
+import * as Linking from "expo-linking";
+import * as Location from "expo-location";
 
-// Establish socket connection (GBC IP address)
+// Establish socket connection
 const socket = io("http://10.16.49.26:3000");
 
 export default function ChatScreen({ navigation }) {
@@ -21,6 +23,7 @@ export default function ChatScreen({ navigation }) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMessageMenuOpen, setIsMessageMenuOpen] = useState(null);
 
   useEffect(() => {
     // Listen for incoming messages
@@ -55,37 +58,86 @@ export default function ChatScreen({ navigation }) {
     setMessage(""); // Clear the input field
   };
 
+  const fetchLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Location access is required.");
+      return;
+    }
+
+    const location = await Location.getCurrentPositionAsync({});
+    const { latitude, longitude } = location.coords;
+
+    // Add location message to chat
+    const locationMessage = {
+      id: generateUUID(),
+      username: user.username,
+      profilePhoto: user.profilePhoto,
+      message: `📍 Location: https://www.google.com/maps?q=${latitude},${longitude}`,
+    };
+
+    setMessages((prevMessages) => [...prevMessages, locationMessage]);
+
+    // Send the location message to the server
+    socket.emit("send_message", locationMessage);
+  };
+
+  const handleShareToTwitter = (message, username) => {
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+      `Ensemble App\n\n${username}: ${message}`
+    )}`;
+    Linking.openURL(twitterUrl); // Open the Twitter app or browser
+    setIsMessageMenuOpen(null); // Close menu after sharing
+  };
+
   const renderMessage = ({ item }) => {
     const isUserMessage = item.username === user.username;
 
     return (
-      <View
-        style={[
-          styles.messageContainer,
-          isUserMessage
-            ? styles.userMessageContainer
-            : styles.receivedMessageContainer,
-        ]}
-      >
-        <Image
-          source={
-            item.profilePhoto
-              ? { uri: item.profilePhoto }
-              : require("../../assets/placeholder.jpg")
-          }
-          style={styles.profilePhoto}
-        />
-        <View
+      <View>
+        <TouchableOpacity
           style={[
-            styles.messageBubble,
+            styles.messageContainer,
             isUserMessage
-              ? styles.userMessageBubble
-              : styles.receivedMessageBubble,
+              ? styles.userMessageContainer
+              : styles.receivedMessageContainer,
           ]}
+          onPress={() =>
+            setIsMessageMenuOpen(isMessageMenuOpen === item.id ? null : item.id)
+          } // Toggle menu on message press
         >
-          <Text style={styles.username}>{item.username}</Text>
-          <Text style={styles.messageText}>{item.message}</Text>
-        </View>
+          <Image
+            source={
+              item.profilePhoto
+                ? { uri: item.profilePhoto }
+                : require("../../assets/placeholder.jpg")
+            }
+            style={styles.profilePhoto}
+          />
+          <View
+            style={[
+              styles.messageBubble,
+              isUserMessage
+                ? styles.userMessageBubble
+                : styles.receivedMessageBubble,
+            ]}
+          >
+            <Text style={styles.username}>{item.username}</Text>
+            <Text style={styles.messageText}>{item.message}</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Dropdown Menu for "Share to Twitter" */}
+        {isMessageMenuOpen === item.id && (
+          <View style={styles.messageMenu}>
+            <TouchableOpacity
+              style={styles.messageMenuItem}
+              onPress={() => handleShareToTwitter(item.message, item.username)}
+            >
+              <Text style={styles.messageMenuItemText}>Share to Twitter</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
@@ -141,6 +193,11 @@ export default function ChatScreen({ navigation }) {
 
       {/* Input Section */}
       <View style={styles.inputContainer}>
+        {/* Pin Icon */}
+        <TouchableOpacity onPress={fetchLocation} style={styles.pinButton}>
+          <Text style={styles.pinIcon}>📍</Text>
+        </TouchableOpacity>
+
         <TextInput
           style={styles.textInput}
           placeholder='Type your message...'
@@ -255,6 +312,13 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: "#fff",
   },
+  pinButton: {
+    marginRight: 10,
+  },
+  pinIcon: {
+    fontSize: 24,
+    color: "#007bff",
+  },
   textInput: {
     flex: 1,
     height: 40,
@@ -273,5 +337,25 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  messageMenu: {
+    position: "absolute",
+    top: -10,
+    right: 50,
+    backgroundColor: "#fff",
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    zIndex: 1000,
+    elevation: 3,
+    padding: 10,
+  },
+  messageMenuItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  messageMenuItemText: {
+    fontSize: 16,
+    color: "#007bff",
   },
 });
