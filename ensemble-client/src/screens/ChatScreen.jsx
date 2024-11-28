@@ -28,7 +28,12 @@ export default function ChatScreen({ navigation }) {
   useEffect(() => {
     // Listen for incoming messages
     socket.on("receive_message", (data) => {
-      setMessages((prevMessages) => [...prevMessages, data]);
+      // Ensure each received message has a unique ID
+      const receivedMessage = {
+        ...data,
+        id: data.id || generateUUID(), // Use provided ID or generate one
+      };
+      setMessages((prevMessages) => [...prevMessages, receivedMessage]);
     });
 
     return () => {
@@ -104,7 +109,7 @@ export default function ChatScreen({ navigation }) {
           ]}
           onPress={() =>
             setIsMessageMenuOpen(isMessageMenuOpen === item.id ? null : item.id)
-          } // Toggle menu on message press
+          }
         >
           <Image
             source={
@@ -184,10 +189,7 @@ export default function ChatScreen({ navigation }) {
       <FlatList
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item, index) => {
-          const key = item.id || `fallback-${index}`;
-          return key;
-        }}
+        keyExtractor={(item) => item.id} // Use unique ID
         contentContainerStyle={styles.messagesContainer}
       />
 
