@@ -1,9 +1,10 @@
 # Ensemble Chat
-
 ## To run locally
 
 ```bash
-cd ensemble-client
-npm install
-npx expo start
+npm run build
+# Run these in seperate terminal instances
+npm run client
+# Run these in seperate terminal instances
+npm run server
 ```

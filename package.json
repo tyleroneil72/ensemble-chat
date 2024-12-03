@@ -1,0 +1,9 @@
+{
+    "name": "ensemble-chat",
+    "scripts": {
+      "build": "cd ensemble-client && npm install && cd ../ensemble-server && npm install && npm run build",
+      "client": "cd ensemble-client && npx expo start",
+      "server": "cd ensemble-server && npm start"
+    },
+    "author": "Team Bamboo"
+  }
